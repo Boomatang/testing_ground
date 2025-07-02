@@ -1,7 +1,8 @@
+import argparse
 import json
 import os
 import subprocess
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import matplotlib.pyplot as plt
 from pydantic import BaseModel, field_validator
@@ -40,7 +41,7 @@ def is_graphable(group: tuple, element: BenchmarkResult, limit: timedelta) -> bo
     )
 
 
-def create_graph(groups, entries, limit):
+def create_graph(groups, entries, limit, image=None, show=True):
     colors = {
         "python": "tab:blue",
         "python (numba)": "tab:orange",
@@ -73,7 +74,11 @@ def create_graph(groups, entries, limit):
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.show()
+    if show:
+        plt.show()
+
+    if image is not None:
+        plt.savefig(image)
 
 
 def better_fit(
@@ -139,6 +144,23 @@ def process_sripts(scripts, limit):
     return groups, entries
 
 
+def file_name(limit: timedelta, path: str) -> str:
+    return f"{path}/{limit.total_seconds()}_{datetime.now().timestamp()}.png"
+
+
+def create_limit(milliseconds=None, seconds=None, minutes=None) -> timedelta:
+    if milliseconds is None:
+        milliseconds = 0
+
+    if seconds is None:
+        seconds = 0
+
+    if minutes is None:
+        minutes = 0
+
+    return timedelta(minutes=minutes, seconds=seconds, milliseconds=milliseconds)
+
+
 if __name__ == "__main__":
     # TODO: Set up some argparse here to allow the selection of time limit and single vs multi threaded scripts
 
@@ -158,11 +180,47 @@ if __name__ == "__main__":
         ["zig-out/bin/main", "multi"],
         ["julia", "-t", str(os.cpu_count()), "./src/monte_carlo_pi/main.jl", "multi"],
     ]
+    limits = [
+        timedelta(milliseconds=50),
+        timedelta(milliseconds=500),
+        timedelta(seconds=5),
+        timedelta(minutes=1),
+    ]
 
-    # limit = timedelta(milliseconds=50)
-    # limit = timedelta(milliseconds=500)
-    # limit = timedelta(seconds=5)
-    limit = timedelta(minutes=1)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--out-dir", help="Where to save the images to.")
+    parser.add_argument(
+        "--full-run",
+        action="store_true",
+        help="Run the full range of limit test.",
+    )
+    parser.add_argument(
+        "--milliseconds", type=int, help="Set the milliseconds for none full runs"
+    )
+    parser.add_argument(
+        "--seconds", type=int, help="Set the seconds for none full runs"
+    )
+    parser.add_argument(
+        "--minutes", type=int, help="Set the minutes for none full runs"
+    )
+
+    args = parser.parse_args()
+
+    if args.full_run:
+        if args.out_dir is None:
+            raise Exception("The out dir needs to be set full-run")
+        for limit in limits:
+            groups, entries = process_sripts(scripts, limit)
+            create_graph(
+                groups, entries, limit, show=False, image=file_name(limit, args.out_dir)
+            )
+        exit()
+
+    print(args)
+
+    limit = create_limit(
+        milliseconds=args.milliseconds, seconds=args.seconds, minutes=args.minutes
+    )
 
     groups, entries = process_sripts(scripts, limit)
     create_graph(groups, entries, limit)

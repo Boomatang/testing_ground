@@ -1,3 +1,7 @@
 /target
 /zig-out
 /.zig-cache
+
+__pycache__/
+*.py[codz]
+*$py.class
